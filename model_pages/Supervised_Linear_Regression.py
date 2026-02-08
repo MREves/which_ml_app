@@ -147,15 +147,17 @@ def app():
                     missing_data_percentage = st.slider("Percentage of missing data", 0, 50, 5)
                     features_missing_data = st.multiselect("Which features to remove data from?", options=df_full.columns[:-1])
 
-
+                    np.random.seed(42)
+                    indices_missing_data = np.random.choice(df_full.shape[0], size=int(df_full.shape[0] * missing_data_percentage / 100), replace=False)
+                    
+                    for feature in features_missing_data:
+                        df_full.loc[indices_missing_data, feature] = np.nan
+                
 
             #----------------------------------
             # Section 1
             #----------------------------------
             st.subheader("1. Data Preparation")
-
-            #produce the test df
-            
 
             st.write(f"The data has {df_full.shape[0]} rows and {df_full.shape[1]} columns (including the target).")
             
@@ -163,9 +165,43 @@ def app():
             feat_names = df_missing_values.index.tolist()
             missing_values = df_missing_values.values
             df_missing_values = pd.DataFrame({'Feature': feat_names, 'Missing Values': missing_values}).T
-            st.write("The table below shows for this sample data, there are no missing values.")
+            st.write("The table below shows any missing values for this data.")
             #st.dataframe(df_missing_values, hide_index=True)
             st.write(df_missing_values.to_html(header=False, index=False), unsafe_allow_html=True)
+
+            if incorporate_missing_data == 'yes':
+                df_dtypes = pd.DataFrame(df_full.dtypes).rename(columns={0: 'Data Type'})
+                df_dtypes_float_int = df_dtypes[df_dtypes['Data Type'].isin(['float64', 'int64'])]
+                df_dtypes_object = df_dtypes[df_dtypes['Data Type'] == 'object']
+
+                list_float_int_features = df_dtypes_float_int.index.tolist()
+                list_float_int_features = [item for item in features_missing_data if item in list_float_int_features]
+                
+                list_object_features = df_dtypes_object.index.tolist()
+                list_object_features = [item for item in features_missing_data if item in list_object_features]
+
+                if len(list_float_int_features) > 0:
+                    selected_int_float_feature = st.selectbox(
+                        "Select which numeric missing data to visualise",
+                        options=list_float_int_features)
+
+                    st.subheader("Controlling for missing data")
+                    st.write(f"**{selected_int_float_feature}**")
+                    
+                    arr = df_full[selected_int_float_feature].dropna()
+                    fig, ax = plt.subplots()
+                    ax.set_title(f"Distribution of {selected_int_float_feature}", fontsize=5)
+                    ax.set_xlabel(selected_int_float_feature, fontsize=5)
+                    ax.set_ylabel("Frequency", fontsize=5)
+                    fig.set_size_inches(4, 2)
+                    fig.tight_layout()
+                    plt.xticks(fontsize=5)
+                    plt.yticks(fontsize=5)
+                    
+                    ax.hist(arr, bins=20)
+                    st.pyplot(fig)
+
+
 
             #----------------------------------
             # Section 2
