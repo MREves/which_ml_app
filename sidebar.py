@@ -141,6 +141,18 @@ def render_sidebar():
             # Filter models based on the selected sub-type
             model_options = MODEL_FAMILIES["Supervised"][problem_type]
         
+        elif model_family == 'Unsupervised':
+            problem_type = "clustering"
+        
+        elif model_family == 'NLP':
+            problem_type = "text"
+        
+        elif model_family == 'Deep Learning':
+            problem_type = st.selectbox(
+                "What is the nature of the deep learning task?",
+                options=["image", "text", "tabular"]
+            )
+
         else:
             # For Unsupervised, NLP, etc., just grab the list directly
             model_options = MODEL_FAMILIES[model_family]
