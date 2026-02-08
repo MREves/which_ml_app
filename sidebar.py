@@ -79,7 +79,7 @@ def handle_model_change(family: str) -> None:
         return
     safe_switch_page(model_page_path(family, selection))
 
-
+'''
 def render_sidebar() -> None:    
     with st.sidebar:
         st.header("Model Families")
@@ -112,4 +112,28 @@ def render_sidebar() -> None:
             index=model_options.index(current_model),
             on_change=handle_model_change,
             kwargs={"family": current_family},
+        )
+        '''
+
+def render_sidebar():
+    with st.sidebar:
+        st.header('Model Family')
+        families = list(MODEL_FAMILIES.keys())
+
+        model_family = st.selectbox(
+            "Model family",
+            options=families,
+            key="nav_family",
+            #index=families.index(0),
+            #on_change=handle_family_change,
+        )
+
+        model_options = MODEL_FAMILIES[model_family]
+        chosen_model = st.selectbox(
+            "Model",
+            options=model_options,
+            key="nav_model",
+            #index=model_options.index(model_family),
+            #on_change=handle_model_change,
+            #kwargs={"family": current_family},
         )
