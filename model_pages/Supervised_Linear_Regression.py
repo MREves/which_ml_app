@@ -3,15 +3,18 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_squared_error, r2_score
-
+from sklearn.metrics import mean_squared_error, r2_score, root_mean_squared_error, mean_absolute_error
+from sklearn.model_selection import cross_val_score
 
 from functions.data_prep.import_data import data_loader
+from functions.data_prep.handle_missing_values import check_and_impute_missing_values
+from functions.model_helpers.model_setup import evaluate_model, create_train_test_split, train_model
+
+from functions.visualisation.charts import histogram
+
 from sklearn.model_selection import train_test_split
 
 from sidebar import render_sidebar
-
-#render_sidebar()
 
 def app():
     st.title("Linear Regression")
@@ -46,7 +49,7 @@ def app():
             *   You need a simple, interpretable baseline.
             """)
         with col2:
-            st.warning("Avoid when:")
+            st.error("Avoid when:")
             st.write("""
             *   The relationship is highly non-linear (curved).
             *   Predicting a category (use Classification instead).
@@ -142,17 +145,15 @@ def app():
             st.title("ML Model Overview")
 
             with st.expander(label="Set preferences:"):
-                incorporate_missing_data = st.selectbox("simulate missing data?", options=['yes', 'no'])
-                if incorporate_missing_data == 'yes':
-                    missing_data_percentage = st.slider("Percentage of missing data", 0, 50, 5)
-                    features_missing_data = st.multiselect("Which features to remove data from?", options=df_full.columns[:-1])
-
-                    np.random.seed(42)
-                    indices_missing_data = np.random.choice(df_full.shape[0], size=int(df_full.shape[0] * missing_data_percentage / 100), replace=False)
-                    
-                    for feature in features_missing_data:
-                        df_full.loc[indices_missing_data, feature] = np.nan
                 
+                missing_data_percentage = st.slider("Percentage of missing data", 0, 50, 5)
+                features_missing_data = st.multiselect("Which features to remove data from?", options=df_full.columns[:-1])
+
+                np.random.seed(42)
+                indices_missing_data = np.random.choice(df_full.shape[0], size=int(df_full.shape[0] * missing_data_percentage / 100), replace=False)
+                for feature in features_missing_data:
+                    df_full.loc[indices_missing_data, feature] = np.nan
+            
 
             #----------------------------------
             # Section 1
@@ -161,6 +162,7 @@ def app():
 
             st.write(f"The data has {df_full.shape[0]} rows and {df_full.shape[1]} columns (including the target).")
             
+
             df_missing_values = df_full.isnull().sum()
             feat_names = df_missing_values.index.tolist()
             missing_values = df_missing_values.values
@@ -169,61 +171,68 @@ def app():
             #st.dataframe(df_missing_values, hide_index=True)
             st.write(df_missing_values.to_html(header=False, index=False), unsafe_allow_html=True)
 
-            if incorporate_missing_data == 'yes':
-                df_dtypes = pd.DataFrame(df_full.dtypes).rename(columns={0: 'Data Type'})
+            if missing_data_percentage >  0:
+                #get df for each dtype we will visualise
+                df_dtypes = pd.DataFrame(df_full.dtypes.astype(str)).rename(columns={0: 'Data Type'})
                 df_dtypes_float_int = df_dtypes[df_dtypes['Data Type'].isin(['float64', 'int64'])]
                 df_dtypes_object = df_dtypes[df_dtypes['Data Type'] == 'object']
 
+                #create lists for features for int/float and string/object
                 list_float_int_features = df_dtypes_float_int.index.tolist()
                 list_float_int_features = [item for item in features_missing_data if item in list_float_int_features]
-                
+
                 list_object_features = df_dtypes_object.index.tolist()
                 list_object_features = [item for item in features_missing_data if item in list_object_features]
 
+                #if missing features are present, allow user to inspect distribution
                 if len(list_float_int_features) > 0:
                     selected_int_float_feature = st.selectbox(
                         "Select which numeric missing data to visualise",
                         options=list_float_int_features)
 
                     st.subheader("Controlling for missing data")
-                    st.write(f"**{selected_int_float_feature}**")
+                    st.write("From the histograms we can see in this case the distribution of data is mostly normal about the mean." \
+                    "As such, the mean value can be used here for imputation. If the data was skewed, then either consider transformation and then mean value, or, use the median for missing values." \
+                    "Alternatively, look for correlation between features, as it may be possible to impute a missing value for one feature from the present values of another (potentially using anoter lineanr regression or other regression model). " \
+                    "If the total count of missing values is low, consider removing the rows. Finally, consider using the Shapiro-Wilk test to quantitatively test for normality (as is the method used here)")
                     
-                    arr = df_full[selected_int_float_feature].dropna()
-                    fig, ax = plt.subplots()
-                    ax.set_title(f"Distribution of {selected_int_float_feature}", fontsize=5)
-                    ax.set_xlabel(selected_int_float_feature, fontsize=5)
-                    ax.set_ylabel("Frequency", fontsize=5)
-                    fig.set_size_inches(4, 2)
-                    fig.tight_layout()
-                    plt.xticks(fontsize=5)
-                    plt.yticks(fontsize=5)
-                    
-                    ax.hist(arr, bins=20)
+                    fig = histogram(df_full, selected_int_float_feature)
                     st.pyplot(fig)
 
-
+                    #-----------------------------------------
+                    #update the data to impute missing values
+                    #-----------------------------------------
+                    df_full_imputed = check_and_impute_missing_values(df_full)
+                    df_full = df_full_imputed
 
             #----------------------------------
-            # Section 2
+            # Section 2 - set up model
             #----------------------------------
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
+            st.subheader("2. Set up model")
+            
+            #get train test split
+            X_train, X_test, y_train, y_test = create_train_test_split(X, y)
+            #instantiate model
             model = LinearRegression()
-            model.fit(X_train, y_train)
-            y_pred = model.predict(X_test)
-            y_pred_train = model.predict(X_train)
+            #fit model
+            model = train_model(model, X_train, y_train)
+            #evaluate the fitted model
+            dict_train_results, dict_test_results = evaluate_model(model, "Regression", X_train, y_train, X_test, y_test)
+            #extract specific metrics
+            mae_train = dict_train_results['mae']
+            mae_test = dict_test_results['mae']
 
-            mse_train = mean_squared_error(y_train, y_pred_train)
-            mse_test = mean_squared_error(y_test, y_pred)
+            
+            #----------------------------------
+            # Section 3 - evaluate the model
+            #----------------------------------
+            st.subheader("3. Evaluate the model")
+            st.write(f"Training MAE: {mae_train:.2f} | Test MAE: {mae_test:.2f}")
 
-            st.write(f"Training MSE: {mse_train:.2f}")
-            st.write(f"Test MSE: {mse_test:.2f}")
+            percent_diff = ((mae_test - mae_train) / mae_train) * 100
 
+            st.metric("Generalization Gap", f"{percent_diff:.1f}%", delta_color="inverse")
+            # A large positive delta warns the user of potential overfitting.
 
+            st.write(f"Target range {y.min()} to {y.max()}")
 
-
-
-            st.dataframe(df_full)
-
-if __name__ == "__main__":
-    app()
