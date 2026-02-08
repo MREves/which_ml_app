@@ -1,16 +1,20 @@
 import streamlit as st
 
 MODEL_FAMILIES = {
-    "Supervised": [
-        "Linear Regression",
-        "Logistic Regression",
-        "Decision Trees",
-        "Random Forest",
-        "Gradient Boosting",
-        "Support Vector Machines",
-        "k-Nearest Neighbors",
-        "Naive Bayes",
-    ],
+    "Supervised": {
+        "Number (regression)": ["Linear Regression", "Decision Trees", "Random Forest", "Gradient Boosting"],
+        "Label (classification)": ["Logistic Regression", "Decision Trees", "Random Forest", "Support Vector Machines", "k-Nearest Neighbors", "Naive Bayes"]
+    },
+    #"Supervised": [
+    #    "Linear Regression",
+    #    "Logistic Regression",
+    #    "Decision Trees",
+    #    "Random Forest",
+    #    "Gradient Boosting",
+    #    "Support Vector Machines",
+    #    "k-Nearest Neighbors",
+    #    "Naive Bayes",
+    #],
     "Unsupervised": [
         "k-Means",
         "Hierarchical Clustering",
@@ -120,20 +124,31 @@ def render_sidebar():
         st.header('Model Family')
         families = list(MODEL_FAMILIES.keys())
 
-        model_family = st.selectbox(
-            "Model family",
-            options=families,
-            key="nav_family",
-            #index=families.index(0),
-            #on_change=handle_family_change,
-        )
+        model_family = st.selectbox("Model family", options=families, key="nav_family", index=None, placeholder="Make a selection")
 
-        model_options = MODEL_FAMILIES[model_family]
+        # Initialize an empty list for models
+        model_options = []
+        
+        if model_family == None:
+            return "no selection"
+        
+        elif model_family == 'Supervised':
+            problem_type = st.selectbox(
+                "Predicting a number or label?",
+                options=["Number (regression)", "Label (classification)"],
+                key="problem_type"
+            )
+            # Filter models based on the selected sub-type
+            model_options = MODEL_FAMILIES["Supervised"][problem_type]
+        
+        else:
+            # For Unsupervised, NLP, etc., just grab the list directly
+            model_options = MODEL_FAMILIES[model_family]
+
+        # The "Model" selectbox now uses the filtered list
         chosen_model = st.selectbox(
             "Model",
-            options=model_options,
-            key="nav_model",
-            #index=model_options.index(model_family),
-            #on_change=handle_model_change,
-            #kwargs={"family": current_family},
+            options=["Overview"] + model_options,
+            key="nav_model"
         )
+        return "selection made"
