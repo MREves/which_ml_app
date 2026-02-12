@@ -9,6 +9,7 @@ from sklearn.model_selection import cross_val_score
 from functions.data_prep.import_data import data_loader
 from functions.data_prep.handle_missing_values import check_and_impute_missing_values
 from functions.model_helpers.model_setup import evaluate_model, create_train_test_split, train_model
+from functions.model_helpers.uncertainty import calculate_bootstrap_intervals
 
 from functions.visualisation.charts import histogram
 
@@ -56,18 +57,6 @@ def app():
             *   Data has many outliers that might skew the line.
             """)
 
-    with tab_deep_dive:
-        st.header("Mechanics")
-        st.latex(r"y = \beta_0 + \beta_1 x_1 + \beta_2 x_2 + ... + \epsilon")
-        st.write("""
-        Where:
-        *   $y$ is the predicted value.
-        *   $\\beta_0$ is the y-intercept (bias).
-        *   $\\beta_1, \\beta_2$ are the coefficients (weights) for each feature.
-        *   $x_1, x_2$ are the feature values.
-        *   $\\epsilon$ is the error term.
-        """)
-        
         st.subheader("Pros & Cons")
         col_pros, col_cons = st.columns(2)
         with col_pros:
@@ -81,6 +70,18 @@ def app():
             st.markdown("*   Sensitive to outliers.")
             st.markdown("*   Prone to underfitting complex data.")
 
+    with tab_deep_dive:
+        st.header("Mechanics")
+        st.latex(r"y = \beta_0 + \beta_1 x_1 + \beta_2 x_2 + ... + \epsilon")
+        st.write("""
+        Where:
+        *   $y$ is the predicted value.
+        *   $\\beta_0$ is the y-intercept (bias).
+        *   $\\beta_1, \\beta_2$ are the coefficients (weights) for each feature.
+        *   $x_1, x_2$ are the feature values.
+        *   $\\epsilon$ is the error term.
+        """)
+        
         st.subheader("Hyperparameters")
         st.write("Key parameters in `sklearn.linear_model.LinearRegression`:")
         st.markdown("""
@@ -97,13 +98,13 @@ def app():
         
         with col_settings:
             st.subheader("Data Generation")
-            n_samples = st.slider("Number of samples", 10, 200, 50, step=10)
-            noise_level = st.slider("Noise level", 0.0, 50.0, 10.0, step=1.0)
-            true_slope = st.slider("True Slope (Beta 1)", -10.0, 10.0, 2.0, step=0.5)
-            true_intercept = st.slider("True Intercept (Beta 0)", -50.0, 50.0, 0.0, step=5.0)
+            n_samples = st.slider("Number of samples", 10, 200, 50, step=10, help="The number of data points to generate for this simulation.")
+            noise_level = st.slider("Noise level", 0.0, 50.0, 10.0, step=1.0, help="The standard deviation of the gaussian noise added to the data. Higher noise makes the relationship less clear.")
+            true_slope = st.slider("True Slope (Beta 1)", -10.0, 10.0, 2.0, step=0.5, help="The actual slope used to generate the synthetic data.")
+            true_intercept = st.slider("True Intercept (Beta 0)", -50.0, 50.0, 0.0, step=5.0, help="The actual y-intercept used to generate the synthetic data.")
             
             st.subheader("Model Settings")
-            fit_intercept = st.checkbox("Fit Intercept", value=True)
+            fit_intercept = st.checkbox("Fit Intercept", value=True, help="Whether to calculate the intercept for this model. If unchecked, the model assumes the data is already centered (intercept is 0).")
         
         with col_plot:
             # Generate synthetic data
@@ -111,19 +112,31 @@ def app():
             X = np.random.rand(n_samples, 1) * 10  # Feature range 0-10
             y = true_slope * X.flatten() + true_intercept + np.random.randn(n_samples) * noise_level
             
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
             # Train model
             model = LinearRegression(fit_intercept=fit_intercept)
-            model.fit(X, y)
-            y_pred = model.predict(X)
+            model.fit(X_train, y_train)
             
             # Metrics
-            r2 = r2_score(y, y_pred)
-            mse = mean_squared_error(y, y_pred)
+            train_mse = mean_squared_error(y_train, model.predict(X_train))
+            test_mse = mean_squared_error(y_test, model.predict(X_test))
+            r2 = r2_score(y_test, model.predict(X_test))
             
             # Plotting
             fig, ax = plt.subplots(figsize=(8, 5))
-            ax.scatter(X, y, color="blue", alpha=0.6, label="Data Points")
-            ax.plot(X, y_pred, color="red", linewidth=2, label=f"Prediction (R2={r2:.2f})")
+            ax.scatter(X_train, y_train, color="blue", alpha=0.6, label="Train Data")
+            ax.scatter(X_test, y_test, color="green", alpha=0.6, label="Test Data")
+            
+            # Plot prediction line over full range
+            X_plot = np.linspace(0, 10, 100).reshape(-1, 1)
+            y_plot = model.predict(X_plot)
+            ax.plot(X_plot, y_plot, color="red", linewidth=2, label=f"Prediction")
+
+            # Uncertainty: Bootstrap Intervals
+            lower, upper = calculate_bootstrap_intervals(model, X_train, y_train, X_plot, n_bootstraps=50)
+            ax.fill_between(X_plot.flatten(), lower, upper, color='red', alpha=0.15, label="95% Confidence (Bootstrap)")
+            
             ax.set_xlabel("Feature X")
             ax.set_ylabel("Target y")
             ax.legend()
@@ -135,7 +148,11 @@ def app():
             **Model Coefficients:**
             *   Slope: {model.coef_[0]:.2f} (True: {true_slope})
             *   Intercept: {model.intercept_:.2f} (True: {true_intercept})
-            *   MSE: {mse:.2f}
+            
+            **Performance:**
+            *   Train MSE: {train_mse:.2f}
+            *   Test MSE: {test_mse:.2f}
+            *   Test R2: {r2:.2f}
             """)
 
         with tab_model:
@@ -235,4 +252,3 @@ def app():
             # A large positive delta warns the user of potential overfitting.
 
             st.write(f"Target range {y.min()} to {y.max()}")
-

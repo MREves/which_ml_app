@@ -2,7 +2,7 @@ import streamlit as st
 
 MODEL_FAMILIES = {
     "Supervised": {
-        "Number (regression)": ["Linear Regression", "Decision Trees", "Random Forest", "Gradient Boosting"],
+        "Number (regression)": ["Linear Regression", "Decision Trees", "Random Forest", "Gradient Boosting", "Support Vector Machines"],
         "Label (classification)": ["Logistic Regression", "Decision Trees", "Random Forest", "Support Vector Machines", "k-Nearest Neighbors", "Naive Bayes"]
     },
     #"Supervised": [
@@ -19,7 +19,7 @@ MODEL_FAMILIES = {
         "k-Means",
         "Hierarchical Clustering",
         "DBSCAN",
-        "Gaussian Mixture Models",
+        #"Gaussian Mixture Models",
         "PCA",
         "t-SNE",
         "UMAP",
@@ -121,6 +121,14 @@ def render_sidebar() -> None:
 
 def render_sidebar():
     with st.sidebar:
+        st.header("Navigation")
+        nav_mode = st.radio("Select View:", ["ML Models", "ML Concepts & Terms"], key="nav_mode")
+
+        if nav_mode == "ML Concepts & Terms":
+            st.header("Concepts")
+            st.selectbox("Select Concept", ["Uncertainty"], key="nav_concept")
+            return "concept_selected"
+
         st.header('Model Family')
         families = list(MODEL_FAMILIES.keys())
 
@@ -133,6 +141,8 @@ def render_sidebar():
             return "no selection"
         
         elif model_family == 'Supervised':
+            if st.session_state.get("problem_type") not in ["Number (regression)", "Label (classification)"]:
+                st.session_state.pop("problem_type", None)
             problem_type = st.selectbox(
                 "Predicting a number or label?",
                 options=["Number (regression)", "Label (classification)"],
@@ -142,16 +152,22 @@ def render_sidebar():
             model_options = MODEL_FAMILIES["Supervised"][problem_type]
         
         elif model_family == 'Unsupervised':
-            problem_type = "clustering"
+            st.session_state["problem_type"] = "Unsupervised (clustering)"
+            model_options = MODEL_FAMILIES["Unsupervised"]
         
         elif model_family == 'NLP':
-            problem_type = "text"
+            st.session_state["problem_type"] = "text"
+            model_options = MODEL_FAMILIES["NLP"]
         
         elif model_family == 'Deep Learning':
+            if st.session_state.get("problem_type") not in ["image", "text", "tabular"]:
+                st.session_state.pop("problem_type", None)
             problem_type = st.selectbox(
                 "What is the nature of the deep learning task?",
-                options=["image", "text", "tabular"]
+                options=["image", "text", "tabular"],
+                key="problem_type"
             )
+            model_options = MODEL_FAMILIES["Deep Learning"]
 
         else:
             # For Unsupervised, NLP, etc., just grab the list directly
@@ -163,4 +179,4 @@ def render_sidebar():
             options=["Overview"] + model_options,
             key="nav_model"
         )
-        return "selection made"
+        return "model_selected"
